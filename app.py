@@ -195,7 +195,8 @@ with col1:
 
         if st.button("🔍 Analyze Invoice", type="primary", use_container_width=True):
             with st.spinner("⏳ Reading text from image..."):
-                file_path = f"uploads/{uploaded_file.name}"
+                import tempfile
+                file_path = os.path.join(tempfile.gettempdir(), uploaded_file.name)     
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 text, error = extract_text(file_path)
