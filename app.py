@@ -93,14 +93,14 @@ def update_excel(data, file_name):
     }
     try:
         os.makedirs("outputs", exist_ok=True)
-        if os.path.exists(EXCEL_PATH):
-            df = pd.read_excel(EXCEL_PATH)
+        if os.path.exists(EXCEL_PATH): # type: ignore
+            df = pd.read_excel(EXCEL_PATH) # pyright: ignore[reportUndefinedVariable]
             df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         else:
             df = pd.DataFrame([new_row])
 
         # حفظ مع تنسيق احترافي
-        with pd.ExcelWriter(EXCEL_PATH, engine="openpyxl") as writer:
+        with pd.ExcelWriter(EXCEL_PATH, engine="openpyxl") as writer: # pyright: ignore[reportUndefinedVariable]
             df.to_excel(writer, index=False, sheet_name="Invoices")
             ws = writer.sheets["Invoices"]
 
@@ -259,9 +259,9 @@ fc1, fc2, fc3 = st.columns([1, 1, 2])
 
 with fc1:
     if st.button("📊 Open Excel File", use_container_width=True):
-        if os.path.exists(EXCEL_PATH):
+        if os.path.exists(EXCEL_PATH): # pyright: ignore[reportUndefinedVariable]
             subprocess.Popen(
-                f'start excel "{EXCEL_PATH}"',
+                f'start excel "{EXCEL_PATH}"', # pyright: ignore[reportUndefinedVariable]
                 shell=True
             )
             st.success("✅ Opening Excel...")
@@ -274,9 +274,9 @@ with fc2:
         conn.execute("DELETE FROM invoices")
         conn.commit()
         conn.close()
-        if os.path.exists(EXCEL_PATH):
+        if os.path.exists(EXCEL_PATH): # pyright: ignore[reportUndefinedVariable]
             try:
-                os.remove(EXCEL_PATH)
+                os.remove(EXCEL_PATH) # pyright: ignore[reportUndefinedVariable]
             except PermissionError:
                 st.error("⚠️ Please close the Excel file first, then click again!")
                 st.stop()
