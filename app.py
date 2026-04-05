@@ -8,8 +8,8 @@ from ocr_engine import extract_text
 from ai_extractor import extract_invoice_data
 from data_handler import init_database, save_invoice, get_all_invoices
 
-DB_PATH = "database/invoices.db"
-EXCEL_PATH = os.path.abspath("outputs/invoices_database.xlsx")
+import tempfile
+DB_PATH = os.path.join(tempfile.gettempdir(), "invoices.db")
 
 st.set_page_config(
     page_title="AI Invoice Processor",

@@ -4,7 +4,8 @@ import json
 import os
 from datetime import datetime
 
-DB_PATH = "database/invoices.db"
+import tempfile, os
+DB_PATH = os.path.join(tempfile.gettempdir(), "invoices.db")
 
 def init_database():
     """إنشاء قاعدة البيانات"""
