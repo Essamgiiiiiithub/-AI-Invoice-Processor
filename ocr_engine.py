@@ -14,8 +14,9 @@ def read_image(image_path):
 
 def read_pdf(pdf_path):
     """قراءة نص من PDF بتحويل الصفحات إلى صور"""
+    poppler_path = os.getenv("POPPLER_PATH") or r"C:\\Users\\hp\\Downloads\\poppler\\Library\\bin"
     try:
-        images = convert_from_path(pdf_path)
+        images = convert_from_path(pdf_path, poppler_path=poppler_path)
         full_text = ""
         for img in images:
             text = pytesseract.image_to_string(img, lang='ara+eng')
@@ -24,8 +25,8 @@ def read_pdf(pdf_path):
     except Exception as e:
         message = (
             "Unable to process PDF. "
-            "Ensure Poppler is installed and added to PATH, then restart the app. "
-            f"Error: {e}"
+            "Ensure Poppler is installed and the correct path is set. "
+            f"Current POPPLER_PATH={poppler_path}. Error: {e}"
         )
         print(f"❌ PDF conversion error: {e}")
         return None, message
