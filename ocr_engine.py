@@ -34,10 +34,20 @@ else:
     pytesseract.pytesseract.tesseract_cmd = "tesseract"
 
 
+def _is_valid_poppler_path(path):
+    if not path or not os.path.isdir(path):
+        return False
+
+    required_bins = ["pdfinfo.exe", "pdftoppm.exe"]
+    return all(os.path.exists(os.path.join(path, binary)) for binary in required_bins)
+
+
 def _get_poppler_path():
     candidate = os.getenv("POPPLER_PATH")
     if candidate:
-        return candidate
+        if _is_valid_poppler_path(candidate):
+            return candidate
+        print(f"⚠️ POPPLER_PATH is set but invalid: {candidate}")
 
     # قائمة مسارات Poppler الافتراضية
     DEFAULT_POPPLER_PATHS = [
@@ -48,7 +58,7 @@ def _get_poppler_path():
     ]
 
     for path in DEFAULT_POPPLER_PATHS:
-        if os.path.exists(path):
+        if _is_valid_poppler_path(path):
             return path
 
     return None
@@ -79,11 +89,20 @@ def read_pdf(pdf_path):
             full_text += text + "\n"
         return full_text.strip(), None
     except Exception as e:
-        message = (
-            "Unable to process PDF. Ensure Poppler is installed and POPPLER_PATH is set. "
-            f"Current POPPLER_PATH={poppler_path!r}. Error: {e}"
-        )
         print(f"❌ PDF conversion error: {e}")
+        if poppler_path is None:
+            message = (
+                "Unable to process PDF. Poppler was not found. "
+                "Install Poppler and set POPPLER_PATH to the bin directory, or add Poppler binaries to PATH. "
+                "See https://pdf2image.readthedocs.io/en/latest/installation.html. "
+                f"Current POPPLER_PATH={poppler_path!r}. Error: {e}"
+            )
+        else:
+            message = (
+                "Unable to process PDF. The configured POPPLER_PATH appears invalid or missing required binaries. "
+                "Ensure pdfinfo.exe and pdftoppm.exe are present in the directory. "
+                f"POPPLER_PATH={poppler_path!r}. Error: {e}"
+            )
         return None, message
 
 

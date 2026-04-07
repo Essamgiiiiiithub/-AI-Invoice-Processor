@@ -128,45 +128,71 @@ footer, #MainMenu, header { visibility: hidden; }
 .badge-purple { background: #ede9fe; color: #6d28d9; }
 
 /* ── Upload zone ── */
+.stFileUploader label {
+    font-weight: 700 !important;
+    color: #111827 !important;
+    font-size: 1rem !important;
+}
+.uploadedFile,
+[data-testid="stFileUploader"],
+[data-testid="stFileUploader"] * {
+    color: #111827 !important;
+    font-weight: 700 !important;
+    opacity: 1 !important;
+}
 [data-testid="stFileUploader"] {
-    background: #f8faff;
-    border: 2px dashed #93c5fd;
-    border-radius: 14px;
-    padding: 0.5rem;
-    transition: border-color .2s;
-    color: #0f172a !important;
+    background: #f0f9ff !important;
+    border: 2px dashed #3b82f6 !important;
+    border-radius: 12px !important;
+    padding: 0.5rem !important;
 }
-[data-testid="stFileUploader"]:hover { border-color: #3b82f6; }
-[data-testid="stFileUploader"] *,
-section[data-testid="stFileUploadDropzone"] {
-    color: #0f172a !important;
-}
-section[data-testid="stFileUploadDropzone"] {
+[data-testid="stFileUploader"]:hover {
+    border-color: #1d4ed8 !important;
     background: #eff6ff !important;
-    padding: 1.5rem !important;
+}
+section[data-testid="stFileUploadDropzone"],
+section[data-testid="stFileUploadDropzone"] * {
+    color: #111827 !important;
+    font-weight: 700 !important;
+    font-size: 0.9rem !important;
+}
+section[data-testid="stFileUploadDropzone"] {
+    padding: 0.8rem !important;
+    background: transparent !important;
 }
 
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {
-    background: #f1f5f9;
-    border-radius: 12px;
-    padding: 4px;
-    gap: 4px;
+    background: #eff6ff;
+    border-radius: 14px;
+    padding: 6px;
+    gap: 10px;
     border: none !important;
+    margin-bottom: 1rem;
 }
 .stTabs [data-baseweb="tab"] {
-    border-radius: 9px !important;
-    font-weight: 600 !important;
-    font-size: 0.88rem !important;
-    padding: 8px 20px !important;
-    color: #64748b !important;
+    border-radius: 12px !important;
+    font-weight: 800 !important;
+    font-size: 1rem !important;
+    letter-spacing: 0.02em !important;
+    line-height: 1.4 !important;
+    padding: 12px 24px !important;
+    color: #111827 !important;
     border: none !important;
-    background: transparent !important;
+    background: #ffffff !important;
+    text-shadow: none !important;
+    transition: transform .2s ease, box-shadow .2s ease, color .2s ease, background .2s ease;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(15,23,42,0.08) !important;
 }
 .stTabs [aria-selected="true"] {
-    background: white !important;
-    color: #0f172a !important;
-    box-shadow: 0 1px 6px rgba(15,23,42,0.1) !important;
+    background: #ffffff !important;
+    border: 1px solid #c7d2fe !important;
+    color: #111827 !important;
+    font-weight: 900 !important;
+    box-shadow: 0 6px 16px rgba(15,23,42,0.08) !important;
 }
 
 /* ── Section titles ── */
@@ -371,10 +397,10 @@ with tab1:
     with col_up:
         st.markdown('<div class="section-title">Upload New Document</div>', unsafe_allow_html=True)
         uploaded_files = st.file_uploader(
-            "Drag & drop document image or PDF or click to browse",
+            "Click to browse or drag & drop files",
             type=["jpg", "jpeg", "png", "bmp", "pdf"],
             accept_multiple_files=True,
-            label_visibility="collapsed",
+            label_visibility="visible",
         )
         if uploaded_files:
             def is_image(filename):
