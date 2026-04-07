@@ -1,22 +1,78 @@
+import os
+import shutil
 import pytesseract
 from PIL import Image
-import os
 from pdf2image import convert_from_path
 
 # مسار Tesseract
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+DEFAULT_TESSERACT_PATHS = [
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+]
+
+
+def _find_tesseract():
+    explicit = os.getenv("TESSERACT_CMD")
+    if explicit and os.path.exists(explicit):
+        return explicit
+
+    for path in DEFAULT_TESSERACT_PATHS:
+        if os.path.exists(path):
+            return path
+
+    found = shutil.which("tesseract")
+    if found:
+        return found
+
+    return None
+
+
+TESSERACT_CMD = _find_tesseract()
+if TESSERACT_CMD:
+    pytesseract.pytesseract.tesseract_cmd = TESSERACT_CMD
+else:
+    pytesseract.pytesseract.tesseract_cmd = "tesseract"
+
+
+def _get_poppler_path():
+    candidate = os.getenv("POPPLER_PATH")
+    if candidate:
+        return candidate
+
+    # قائمة مسارات Poppler الافتراضية
+    DEFAULT_POPPLER_PATHS = [
+        r"C:\Users\hp\Downloads\poppler\Library\bin",
+        r"C:\Program Files\poppler\bin",
+        r"C:\Program Files (x86)\poppler\bin",
+        # أضف مسارات أخرى إذا لزم الأمر
+    ]
+
+    for path in DEFAULT_POPPLER_PATHS:
+        if os.path.exists(path):
+            return path
+
+    return None
+
 
 def read_image(image_path):
     """قراءة نص من صورة"""
-    img = Image.open(image_path)
-    text = pytesseract.image_to_string(img, lang='ara+eng')
-    return text.strip()
+    try:
+        img = Image.open(image_path)
+        text = pytesseract.image_to_string(img, lang='ara+eng')
+        return text.strip(), None
+    except Exception as e:
+        return None, f"Image OCR error: {e}"
+
 
 def read_pdf(pdf_path):
     """قراءة نص من PDF بتحويل الصفحات إلى صور"""
-    poppler_path = os.getenv("POPPLER_PATH") or r"C:\\Users\\hp\\Downloads\\poppler\\Library\\bin"
+    poppler_path = _get_poppler_path()
     try:
-        images = convert_from_path(pdf_path, poppler_path=poppler_path)
+        if poppler_path:
+            images = convert_from_path(pdf_path, poppler_path=poppler_path)
+        else:
+            images = convert_from_path(pdf_path)
+
         full_text = ""
         for img in images:
             text = pytesseract.image_to_string(img, lang='ara+eng')
@@ -24,12 +80,12 @@ def read_pdf(pdf_path):
         return full_text.strip(), None
     except Exception as e:
         message = (
-            "Unable to process PDF. "
-            "Ensure Poppler is installed and the correct path is set. "
-            f"Current POPPLER_PATH={poppler_path}. Error: {e}"
+            "Unable to process PDF. Ensure Poppler is installed and POPPLER_PATH is set. "
+            f"Current POPPLER_PATH={poppler_path!r}. Error: {e}"
         )
         print(f"❌ PDF conversion error: {e}")
         return None, message
+
 
 def extract_text(file_path):
     """الدالة الرئيسية"""
@@ -37,8 +93,7 @@ def extract_text(file_path):
     print(f"📂 Processing: {file_path}")
 
     if ext in ['.jpg', '.jpeg', '.png', '.bmp']:
-        text = read_image(file_path)
-        error = None
+        text, error = read_image(file_path)
     elif ext == '.pdf':
         text, error = read_pdf(file_path)
     else:
