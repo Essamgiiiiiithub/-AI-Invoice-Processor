@@ -8,9 +8,8 @@ from datetime import datetime
 import tempfile
 DB_PATH = os.path.join(tempfile.gettempdir(), "documents.db")
 
-
 def parse_numeric_value(value):
-    """Parse a numeric amount from text or numeric input."""
+    """تحليل القيمة الرقمية من النص"""
     if value is None:
         return None
     if isinstance(value, (int, float)):
@@ -21,7 +20,6 @@ def parse_numeric_value(value):
     text = text.replace(",", "")
     match = re.search(r"[-+]?[0-9]*\.?[0-9]+", text)
     return float(match.group(0)) if match else None
-
 
 def init_database():
     """إنشاء قاعدة البيانات"""
@@ -65,10 +63,17 @@ def init_database():
         if col_name not in existing_columns:
             cursor.execute(f"ALTER TABLE invoices ADD COLUMN {col_name} {col_type}")
 
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_supplier ON invoices(supplier_name)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_created_at ON invoices(created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_document_type ON invoices(document_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_invoice_number ON invoices(invoice_number)")
+
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+
     conn.commit()
     conn.close()
-    print("Database ready!")
-
+    print("تم إعداد قاعدة البيانات")
 
 def save_invoice(data, file_name=""):
     """حفظ الفاتورة في قاعدة البيانات"""
@@ -76,63 +81,109 @@ def save_invoice(data, file_name=""):
     numeric_tax = parse_numeric_value(data.get("numeric_tax") or data.get("tax_amount"))
 
     conn = sqlite3.connect(DB_PATH)
+    conn.isolation_level = None
     cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO invoices 
-        (supplier_name, invoice_number, date, total_amount, numeric_total,
-         tax_amount, numeric_tax, currency, payment_method, notes, items, file_name, created_at,
-         document_type, title, description)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (
-        data.get("supplier_name"),
-        data.get("invoice_number"),
-        data.get("date"),
-        data.get("total_amount"),
-        numeric_total,
-        data.get("tax_amount"),
-        numeric_tax,
-        data.get("currency"),
-        data.get("payment_method"),
-        data.get("notes"),
-        json.dumps(data.get("items", []), ensure_ascii=False),
-        file_name,
-        datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        data.get("document_type"),
-        data.get("title"),
-        data.get("description")
-    ))
-    conn.commit()
-    conn.close()
-    print("Invoice saved to database!")
 
+    try:
+        cursor.execute('''
+            INSERT INTO invoices
+            (supplier_name, invoice_number, date, total_amount, numeric_total,
+             tax_amount, numeric_tax, currency, payment_method, notes, items, file_name, created_at,
+             document_type, title, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            data.get("supplier_name"),
+            data.get("invoice_number"),
+            data.get("date"),
+            data.get("total_amount"),
+            numeric_total,
+            data.get("tax_amount"),
+            numeric_tax,
+            data.get("currency"),
+            data.get("payment_method"),
+            data.get("notes"),
+            json.dumps(data.get("items", []), ensure_ascii=False),
+            file_name,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            data.get("document_type"),
+            data.get("title"),
+            data.get("description")
+        ))
+        print("تم حفظ الفاتورة")
+    except Exception as e:
+        print(f"خطأ في حفظ الفاتورة: {e}")
+    finally:
+        conn.close()
+
+def save_invoices_batch(data_list):
+    """حفظ عدة فواتير دفعة واحدة"""
+    if not data_list:
+        return
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.isolation_level = None
+    cursor = conn.cursor()
+
+    try:
+        for data in data_list:
+            numeric_total = parse_numeric_value(data.get("numeric_total") or data.get("total_amount"))
+            numeric_tax = parse_numeric_value(data.get("numeric_tax") or data.get("tax_amount"))
+
+            cursor.execute('''
+                INSERT INTO invoices
+                (supplier_name, invoice_number, date, total_amount, numeric_total,
+                 tax_amount, numeric_tax, currency, payment_method, notes, items, file_name, created_at,
+                 document_type, title, description)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                data.get("supplier_name"),
+                data.get("invoice_number"),
+                data.get("date"),
+                data.get("total_amount"),
+                numeric_total,
+                data.get("tax_amount"),
+                numeric_tax,
+                data.get("currency"),
+                data.get("payment_method"),
+                data.get("notes"),
+                json.dumps(data.get("items", []), ensure_ascii=False),
+                data.get("file_name", ""),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                data.get("document_type"),
+                data.get("title"),
+                data.get("description")
+            ))
+        print(f"تم حفظ {len(data_list)} فاتورة")
+    except Exception as e:
+        print(f"خطأ في حفظ الدفعة: {e}")
+    finally:
+        conn.close()
 
 def export_to_excel():
-    """تصدير كل الفواتير لـ Excel"""
+    """تصدير الفواتير إلى Excel"""
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql_query("SELECT * FROM invoices", conn)
     conn.close()
 
     output_path = f"outputs/invoices_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
     df.to_excel(output_path, index=False)
-    print(f"Exported to: {output_path}")
+    print(f"تم التصدير إلى: {output_path}")
     return output_path
 
-
 def get_all_invoices():
-    """جلب كل الفواتير من قاعدة البيانات"""
+    """جلب جميع الفواتير"""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM invoices ORDER BY created_at DESC")
+    cursor.execute("SELECT * FROM invoices ORDER BY created_at DESC LIMIT 500")
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
-
 def get_invoices_df():
-    """Return all invoices as a pandas DataFrame with parsed fields."""
+    """إرجاع الفواتير كـ DataFrame"""
     conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM invoices ORDER BY created_at DESC", conn)
+    df = pd.read_sql_query("SELECT * FROM invoices ORDER BY created_at DESC LIMIT 500", conn)
     conn.close()
 
     if df.empty:
@@ -156,38 +207,10 @@ def get_invoices_df():
 
     return df
 
-
 def delete_invoice(invoice_id):
-    """حذف فاتورة من قاعدة البيانات"""
+    """حذف فاتورة"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
     conn.commit()
     conn.close()
-
-
-# ── تجربة الكود ─────────────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    print("Data Handler Test")
-    print("=" * 40)
-
-    # إنشاء قاعدة البيانات
-    init_database()
-
-    # بيانات تجريبية
-    test_data = {
-        "supplier_name": "Array Training Center",
-        "invoice_number": "INV-2024-001",
-        "date": "15/7/2024",
-        "total_amount": "5000 EGP",
-        "tax_amount": "750 EGP",
-        "items": ["AI Diploma Course"]
-    }
-
-    # حفظ الفاتورة
-    save_invoice(test_data, "test_invoice.jpg")
-
-    # تصدير لـ Excel
-    export_to_excel()
-
-    print("\nAll done!")

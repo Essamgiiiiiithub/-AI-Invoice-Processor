@@ -9,12 +9,13 @@ from datetime import datetime
 from ocr_engine import extract_text
 from ai_extractor import extract_document_data
 from data_handler import init_database, save_invoice, get_all_invoices, get_invoices_df, delete_invoice
+from batch_processor import DocumentProcessor
 
 import tempfile
-DB_PATH  = os.path.join(tempfile.gettempdir(), "documents.db")
+DB_PATH = os.path.join(tempfile.gettempdir(), "documents.db")
 EXCEL_PATH = os.path.join(os.getcwd(), "documents.xlsx")
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# إعداد الصفحة
 st.set_page_config(
     page_title="AI Document Processor",
     page_icon="🧾",
@@ -22,18 +23,16 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# ── CSS ───────────────────────────────────────────────────────────────────────
+# CSS للتصميم
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 
 *, *::before, *::after { font-family: 'Plus Jakarta Sans', sans-serif !important; box-sizing: border-box; }
 
-/* ── Hide Streamlit chrome ── */
 footer, #MainMenu, header { visibility: hidden; }
 .block-container { padding-top: 1.5rem !important; }
 
-/* ── Hero ── */
 .hero {
     background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f2942 100%);
     padding: 2rem 2.5rem;
@@ -60,7 +59,7 @@ footer, #MainMenu, header { visibility: hidden; }
 }
 .hero-inner { position: relative; z-index: 1; }
 .hero h1 { font-size: 1.9rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; }
-.hero p  { font-size: 0.92rem; opacity: 0.7; margin: 0.4rem 0 0; }
+.hero p { font-size: 0.92rem; opacity: 0.7; margin: 0.4rem 0 0; }
 .hero-badge {
     display: inline-block;
     background: rgba(99,179,237,0.2);
@@ -74,7 +73,6 @@ footer, #MainMenu, header { visibility: hidden; }
     letter-spacing: 0.5px;
 }
 
-/* ── KPI Cards ── */
 .kpi-card {
     background: white;
     border-radius: 16px;
@@ -93,9 +91,9 @@ footer, #MainMenu, header { visibility: hidden; }
     width: 4px; height: 100%;
     border-radius: 0 16px 16px 0;
 }
-.kpi-blue::after   { background: #3b82f6; }
+.kpi-blue::after { background: #3b82f6; }
 .kpi-purple::after { background: #8b5cf6; }
-.kpi-green::after  { background: #10b981; }
+.kpi-green::after { background: #10b981; }
 .kpi-orange::after { background: #f59e0b; }
 .kpi-icon  { font-size: 1.6rem; margin-bottom: 0.5rem; }
 .kpi-num   { font-size: 1.9rem; font-weight: 800; color: #0f172a; line-height: 1; }
@@ -274,11 +272,9 @@ section[data-testid="stExpander"] div {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Init ─────────────────────────────────────────────────────────────────────
 init_database()
 os.makedirs("outputs", exist_ok=True)
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
 def update_excel(data, file_name):
     new_row = {
         "Document Type":   data.get("document_type") or "—",
@@ -344,18 +340,17 @@ def make_chart(fig):
     fig.update_yaxes(gridcolor="#f1f5f9", zeroline=False)
     return fig
 
-# ── Hero ──────────────────────────────────────────────────────────────────────
+# Hero
 st.markdown("""
 <div class="hero">
   <div class="hero-inner">
-    <div class="hero-badge">POWERED BY GROQ · LLAMA 3.3 70B</div>
-    <h1>AI Document Processor</h1>
+    <h2>AI Document Processor</h2>
     <p>Scan · Extract · Analyze · Export — all in seconds</p>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── KPI Row ───────────────────────────────────────────────────────────────────
+# KPI Row
 df_all = get_invoices_df()
 total_invoices = len(df_all)
 total_suppliers = df_all["supplier_name"].nunique() if not df_all.empty else 0
@@ -365,7 +360,7 @@ avg_amount = df_all["numeric_total"].mean() if not df_all.empty and "numeric_tot
 k1, k2, k3, k4 = st.columns(4)
 with k1:
     st.markdown(f"""<div class="kpi-card kpi-blue">
-        <div class="kpi-icon">🧾</div>
+        <div class="kpi-icon"></div>
         <div class="kpi-num">{total_invoices}</div>
         <div class="kpi-label">Total Documents</div>
     </div>""", unsafe_allow_html=True)
@@ -388,9 +383,6 @@ with k4:
     </div>""", unsafe_allow_html=True)
 tab1, tab2, tab3 = st.tabs(["Upload Document", "Dashboard", "History"])
 
-# ═══════════════════════════════════════════════════════════
-#  TAB 1 — UPLOAD
-# ═══════════════════════════════════════════════════════════
 with tab1:
     col_up, col_res = st.columns([1, 1], gap="large")
 
@@ -421,9 +413,36 @@ with tab1:
             st.markdown("<br>", unsafe_allow_html=True)
 
             if st.button("Analyze Documents", type="primary", use_container_width=True):
-                processed = 0
-                last_data = None
-                for uploaded_file in uploaded_files:
+                if len(uploaded_files) > 1:
+                    # استخدم معالج دفعي للملفات المتعددة (أسرع)
+                    with st.spinner(f"⏳ Processing {len(uploaded_files)} documents with optimized batch processor..."):
+                        processor = DocumentProcessor(max_workers=3)
+                        results, errors = processor.process_files(uploaded_files)
+                        
+                        # حفظ النتائج دفعة واحدة
+                        if results:
+                            from data_handler import save_invoices_batch
+                            data_list = [data for data, _ in results]
+                            save_invoices_batch(data_list)
+                            
+                            # تحديث Excel
+                            for data, filename in results:
+                                update_excel(data, filename)
+                        
+                        # عرض النتائج
+                        if errors:
+                            st.warning(f"{len(errors)} document(s) had errors")
+                            for filename, error in errors:
+                                st.error(f"{filename}: {error}")
+                        
+                        if results:
+                            st.success(f"{len(results)} document(s) analyzed and saved!")
+                            st.session_state["last_result"] = results[0][0]
+                        
+                        st.rerun()
+                else:
+                    # معالجة ملف واحد بشكل طبيعي
+                    uploaded_file = uploaded_files[0]
                     with st.spinner(f"⏳ Reading text from {uploaded_file.name}..."):
                         file_path = os.path.join(tempfile.gettempdir(), uploaded_file.name)
                         with open(file_path, "wb") as f:
@@ -432,27 +451,21 @@ with tab1:
 
                     if error:
                         st.error(f"{uploaded_file.name}: {error}")
-                        continue
-                    if not text:
+                    elif not text:
                         st.error(f"{uploaded_file.name}: No text found. Try a clearer photo.")
-                        continue
-
-                    with st.spinner(f"🤖 AI extracting document data for {uploaded_file.name}..."):
-                        data = extract_document_data(text)
-                        save_invoice(data, uploaded_file.name)
-                        excel_ok = update_excel(data, uploaded_file.name)
-
-                    last_data = data
-                    processed += 1
-                    if not excel_ok:
-                        st.warning(f"{uploaded_file.name}: Saved to database but Excel update failed.")
-
-                if processed:
-                    st.success(f"{processed} document(s) analyzed and saved!")
-                    st.session_state["last_result"] = last_data
-                else:
-                    st.warning("No documents were processed.")
-                st.rerun()
+                    else:
+                        with st.spinner(f"🤖 AI extracting document data for {uploaded_file.name}..."):
+                            data = extract_document_data(text)
+                            save_invoice(data, uploaded_file.name)
+                            excel_ok = update_excel(data, uploaded_file.name)
+                            
+                            if excel_ok:
+                                st.success(f"{uploaded_file.name} analyzed and saved!")
+                            else:
+                                st.warning(f"Saved to database but Excel update failed.")
+                            
+                            st.session_state["last_result"] = data
+                            st.rerun()
 
     with col_res:
         st.markdown('<div class="section-title">Extracted Information</div>', unsafe_allow_html=True)
@@ -466,7 +479,7 @@ with tab1:
             with r1:
                 st.metric("Supplier",    result.get("supplier_name") or "—")
                 st.metric("Date",        result.get("date") or "—")
-                st.metric("🧾 Tax",         result.get("tax_amount") or "—")
+                st.metric("Tax",         result.get("tax_amount") or "—")
             with r2:
                 st.metric("Document No.", result.get("invoice_number") or "—")
                 st.metric("Payment",     result.get("payment_method") or "—")
@@ -476,7 +489,7 @@ with tab1:
             if result.get("document_type"):
                 st.metric("Document Type", result.get("document_type"))
             if result.get("title"):
-                st.metric("📋 Title", result.get("title"))
+                st.metric("Title", result.get("title"))
             if result.get("description"):
                 st.metric("📝 Description", result.get("description"))
 
@@ -490,128 +503,133 @@ with tab1:
         else:
             st.markdown('<div class="empty-state"><p>Upload and analyze a document to see extracted information here</p></div>', unsafe_allow_html=True)
 
-# ═══════════════════════════════════════════════════════════
-#  TAB 2 — DASHBOARD
-# ═══════════════════════════════════════════════════════════
+# TAB 2 — DASHBOARD (Unified View)
 with tab2:
     if df_all.empty:
         st.markdown('<div class="empty-state" style="padding:4rem"><p>No data yet - upload some documents first<br>and the dashboard will come alive!</p></div>', unsafe_allow_html=True)
     else:
-        COLORS = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444",
-                  "#06b6d4", "#ec4899", "#84cc16", "#f97316", "#6366f1"]
+        st.markdown('<div class="section-title">All Invoices Dashboard</div>', unsafe_allow_html=True)
+        
+        # إنشاء جدول موحد بكل المعلومات
+        df_dashboard = df_all.copy()
+        
+        # تنسيق البيانات للعرض
+        df_display = pd.DataFrame({
+            'Supplier': df_dashboard['supplier_name'].fillna('—'),
+            'Invoice #': df_dashboard['invoice_number'].fillna('—'),
+            'Date': df_dashboard['date'].fillna('—'),
+            'Type': df_dashboard['document_type'].fillna('Unknown'),
+            'Total Amount': df_dashboard['total_amount'].fillna('—'),
+            'Numeric': df_dashboard['numeric_total'].fillna(0),
+            'Tax': df_dashboard['tax_amount'].fillna('—'),
+            'Payment': df_dashboard['payment_method'].fillna('—'),
+            'Title': df_dashboard['title'].fillna('—'),
+            'Added At': df_dashboard['created_at'].fillna('—')
+        })
+        
+        # إضافة خيارات الفرز والتصفية
+        col_filter1, col_filter2, col_filter3 = st.columns(3)
+        
+        with col_filter1:
+            supplier_filter = st.multiselect(
+                "Filter by Supplier",
+                options=['All'] + sorted(df_dashboard['supplier_name'].dropna().unique().tolist()),
+                default=['All'],
+                key="supplier_filter"
+            )
+        
+        with col_filter2:
+            type_filter = st.multiselect(
+                "Filter by Document Type",
+                options=['All'] + sorted(df_dashboard['document_type'].fillna('Unknown').unique().tolist()),
+                default=['All'],
+                key="type_filter"
+            )
+        
+        with col_filter3:
+            sort_by = st.selectbox(
+                "Sort by",
+                ["Latest", "Oldest", "Highest Amount", "Lowest Amount", "Supplier A-Z"],
+                key="sort_by"
+            )
+        
+        # تطبيق التصفية
+        df_filtered = df_display.copy()
+        
+        if 'All' not in supplier_filter:
+            df_filtered = df_filtered[df_filtered['Supplier'].isin(supplier_filter)]
+        
+        if 'All' not in type_filter:
+            df_filtered = df_filtered[df_filtered['Type'].isin(type_filter)]
+        
+        # تطبيق الترتيب
+        if sort_by == "Highest Amount":
+            df_filtered = df_filtered.sort_values('Numeric', ascending=False)
+        elif sort_by == "Lowest Amount":
+            df_filtered = df_filtered.sort_values('Numeric', ascending=True)
+        elif sort_by == "Oldest":
+            df_filtered = df_filtered.sort_values('Date', ascending=True)
+        elif sort_by == "Supplier A-Z":
+            df_filtered = df_filtered.sort_values('Supplier', ascending=True)
+        else:  # Latest (default)
+            df_filtered = df_filtered.sort_values('Added At', ascending=False)
+        
+        # عرض الإحصائيات العامة
+        summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
+        
+        with summary_col1:
+            st.metric("Total Documents", len(df_filtered))
+        
+        with summary_col2:
+            total_sum = df_filtered['Numeric'].sum()
+            st.metric("Total Amount", f"{total_sum:,.0f}" if total_sum else "0")
+        
+        with summary_col3:
+            total_tax = df_filtered[df_filtered['Tax'] != '—']['Tax'].apply(
+                lambda x: float(x.split()[0].replace(',', '')) if isinstance(x, str) else 0
+            ).sum()
+            st.metric("Total Tax", f"{total_tax:,.0f}" if total_tax else "0")
+        
+        with summary_col4:
+            avg_amount = df_filtered['Numeric'].mean()
+            st.metric("Average Amount", f"{avg_amount:,.0f}" if avg_amount else "0")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # عرض الجدول بشكل تفاعلي
+        st.markdown('<div class="section-title">Complete Invoices Table</div>', unsafe_allow_html=True)
+        
+        # اختيار الأعمدة المراد عرضها
+        col_select_area = st.expander("Customize Columns", expanded=False)
+        with col_select_area:
+            columns_to_show = st.multiselect(
+                "Select columns to display",
+                options=df_display.columns.tolist(),
+                default=df_display.columns.tolist()[:8],
+                key="columns_select"
+            )
+        
+        df_final = df_filtered[columns_to_show]
+        
+        # عرض الجدول
+        st.dataframe(
+            df_final,
+            use_container_width=True,
+            height=500,
+            hide_index=True,
+            column_config={
+                'Numeric': st.column_config.NumberColumn(format="%.0f"),
+            }
+        )
+        
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        df_chart = df_all.copy()
-
-        # ── Row 1: Supplier bar + Monthly line ──
-        ch1, ch2 = st.columns(2, gap="medium")
-
-        with ch1:
-            st.markdown('<div class="section-title">🏢 Top Suppliers by Amount</div>', unsafe_allow_html=True)
-            sup_df = (df_chart.dropna(subset=["numeric_total"])
-                              .groupby("supplier_name", as_index=False)["numeric_total"].sum()
-                              .sort_values("numeric_total", ascending=False)
-                              .head(8))
-            if not sup_df.empty:
-                fig = px.bar(sup_df, x="numeric_total", y="supplier_name",
-                             orientation="h", color="supplier_name",
-                             color_discrete_sequence=COLORS,
-                             labels={"numeric_total": "Total Amount", "supplier_name": ""})
-                fig.update_traces(marker_line_width=0)
-                fig.update_layout(showlegend=False, height=320)
-                st.plotly_chart(make_chart(fig), use_container_width=True)
-            else:
-                st.info("Not enough numeric data yet.")
-
-        with ch2:
-            st.markdown('<div class="section-title">📅 Monthly Spending Trend</div>', unsafe_allow_html=True)
-            df_chart["created_at"] = pd.to_datetime(df_chart["created_at"], errors="coerce")
-            df_chart["month"] = df_chart["created_at"].dt.to_period("M").astype(str)
-            monthly = (df_chart.dropna(subset=["numeric_total"])
-                               .groupby("month", as_index=False)["numeric_total"].sum()
-                               .sort_values("month"))
-            if not monthly.empty:
-                fig2 = px.area(monthly, x="month", y="numeric_total",
-                               color_discrete_sequence=["#3b82f6"],
-                               labels={"numeric_total": "Amount", "month": ""})
-                fig2.update_traces(fill="tozeroy", line_color="#3b82f6",
-                                   fillcolor="rgba(59,130,246,0.15)")
-                fig2.update_layout(height=320)
-                st.plotly_chart(make_chart(fig2), use_container_width=True)
-            else:
-                st.info("Not enough data for trend.")
-
-        # ── Row 2: Pie + Invoice count bar ──
-        ch3, ch4 = st.columns(2, gap="medium")
-
-        with ch3:
-            st.markdown('<div class="section-title">🥧 Spending Distribution</div>', unsafe_allow_html=True)
-            pie_df = (df_chart.dropna(subset=["numeric_total"])
-                              .groupby("supplier_name", as_index=False)["numeric_total"].sum()
-                              .sort_values("numeric_total", ascending=False))
-            if len(pie_df) > 5:
-                top5   = pie_df.head(5)
-                others = pd.DataFrame([{"supplier_name": "Others",
-                                        "numeric_total": pie_df.iloc[5:]["numeric_total"].sum()}])
-                pie_df = pd.concat([top5, others])
-            if not pie_df.empty:
-                fig3 = px.pie(pie_df, names="supplier_name", values="numeric_total",
-                              color_discrete_sequence=COLORS, hole=0.45)
-                fig3.update_traces(textposition="outside", textinfo="percent+label")
-                fig3.update_layout(height=320, showlegend=False)
-                st.plotly_chart(make_chart(fig3), use_container_width=True)
-
-        with ch4:
-            st.markdown('<div class="section-title">🔢 Documents per Supplier</div>', unsafe_allow_html=True)
-            cnt_df = (df_chart.groupby("supplier_name", as_index=False)
-                              .size().rename(columns={"size": "count"})
-                              .sort_values("count", ascending=False).head(8))
-            if not cnt_df.empty:
-                fig4 = px.bar(cnt_df, x="supplier_name", y="count",
-                              color="supplier_name", color_discrete_sequence=COLORS,
-                              labels={"count": "# Documents", "supplier_name": ""})
-                fig4.update_traces(marker_line_width=0)
-                fig4.update_layout(showlegend=False, height=320)
-                fig4.update_xaxes(tickangle=-25)
-                st.plotly_chart(make_chart(fig4), use_container_width=True)
-
-        # ── Document type distribution ──
-        st.markdown('<div class="section-title">🗂️ Document Type Distribution</div>', unsafe_allow_html=True)
-        if "document_type" in df_chart.columns and not df_chart["document_type"].dropna().empty:
-            type_df = (df_chart["document_type"].fillna("Unknown")
-                                  .value_counts()
-                                  .reset_index())
-            type_df.columns = ["document_type", "count"]
-            fig_type = px.pie(type_df, names="document_type", values="count",
-                              color_discrete_sequence=COLORS, hole=0.45)
-            fig_type.update_traces(textposition="outside", textinfo="percent+label")
-            fig_type.update_layout(height=320, showlegend=False)
-            st.plotly_chart(make_chart(fig_type), use_container_width=True)
-        else:
-            st.info("Upload documents with a detected type to see this chart.")
-
-        # ── Tax analysis ──
-        st.markdown('<div class="section-title">🧾 Tax vs Amount Analysis</div>', unsafe_allow_html=True)
-        tax_df = df_chart.dropna(subset=["numeric_total", "numeric_tax"])
-        if not tax_df.empty:
-            fig5 = go.Figure()
-            fig5.add_trace(go.Bar(name="Total Amount", x=tax_df["supplier_name"],
-                                  y=tax_df["numeric_total"], marker_color="#3b82f6"))
-            fig5.add_trace(go.Bar(name="Tax", x=tax_df["supplier_name"],
-                                  y=tax_df["numeric_tax"], marker_color="#f59e0b"))
-            fig5.update_layout(barmode="group", height=300,
-                                legend=dict(orientation="h", y=1.1))
-            st.plotly_chart(make_chart(fig5), use_container_width=True)
-        else:
-            st.info("Upload more documents with tax data to see this chart.")
-
-# ═══════════════════════════════════════════════════════════
-#  TAB 3 — HISTORY
-# ═══════════════════════════════════════════════════════════
+# TAB 3 — HISTORY
 with tab3:
     col_list, col_actions = st.columns([2, 1], gap="large")
 
     with col_list:
-        st.markdown('<div class="section-title">📋 All Documents</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">All Documents</div>', unsafe_allow_html=True)
         invoices = get_all_invoices()
         if invoices:
             for inv in invoices:
@@ -627,15 +645,15 @@ with tab3:
         if st.button("Export to Excel", use_container_width=True, type="primary"):
             if os.path.exists(EXCEL_PATH):
                 subprocess.Popen(f'start excel "{EXCEL_PATH}"', shell=True)
-                st.success("✅ Opening Excel...")
+                st.success("Opening Excel...")
             else:
-                st.warning("⚠️ No Excel file yet — analyze a document first!")
+                st.warning("No Excel file yet — analyze a document first!")
 
         # Download Excel
         if os.path.exists(EXCEL_PATH):
             with open(EXCEL_PATH, "rb") as f:
                 st.download_button(
-                    "⬇️ Download Excel",
+                    "Download Excel",
                     data=f,
                     file_name="documents.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -658,29 +676,17 @@ with tab3:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Clear all
-        with st.expander("DANGER ZONE - Permanently Delete All Data", expanded=False):
-            st.markdown("""
-            <div style="background:#fff5f5;border-left:4px solid #ef4444;padding:1rem;border-radius:8px;margin-bottom:1rem;">
-            <p style="margin:0;color:#991b1b;font-weight:700;font-size:0.95rem;">
-            This will delete ALL documents permanently!
-            </p>
-            <p style="margin:0.5rem 0 0;color:#7f1d1d;font-size:0.85rem;">
-            This action cannot be undone. Make sure you have backed up your data.
-            </p>
-            </div>
-            """, unsafe_allow_html=True)
-            if st.button("🗑️ Clear All Data", use_container_width=True, type="secondary"):
-                conn = sqlite3.connect(DB_PATH)
-                conn.execute("DELETE FROM invoices")
-                conn.commit()
-                conn.close()
-                if os.path.exists(EXCEL_PATH):
-                    try:
-                        os.remove(EXCEL_PATH)
-                    except PermissionError:
-                        st.error("Close Excel first, then try again!")
-                        st.stop()
-                st.session_state.pop("last_result", None)
-                st.success("All data cleared!")
-                st.rerun()
+        if st.button("Clear All Data", use_container_width=True, type="secondary"):
+            conn = sqlite3.connect(DB_PATH)
+            conn.execute("DELETE FROM invoices")
+            conn.commit()
+            conn.close()
+            if os.path.exists(EXCEL_PATH):
+                try:
+                    os.remove(EXCEL_PATH)
+                except PermissionError:
+                    st.error("Close Excel first, then try again!")
+                    st.stop()
+            st.session_state.pop("last_result", None)
+            st.success("All data cleared!")
+            st.rerun()

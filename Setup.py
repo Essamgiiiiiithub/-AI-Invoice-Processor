@@ -4,7 +4,7 @@ import os
 folders = ['uploads', 'outputs', 'database']
 for folder in folders:
     os.makedirs(folder, exist_ok=True)
-    print(f"✅ Created: {folder}/")
+    print(f"Created: {folder}/")
 
 # إنشاء ملفات المشروع الفارغة
 files = [
@@ -16,8 +16,8 @@ files = [
 for file in files:
     if not os.path.exists(file):
         open(file, 'w').close()
-        print(f"✅ Created: {file}")
+        print(f"Created: {file}")
     else:
-        print(f"⏭️  Already exists: {file}")
+        print(f"Already exists: {file}")
 
-print("\n🚀 Project structure ready!")
+print("\nProject structure ready!")
