@@ -4,6 +4,7 @@ import pytesseract
 from PIL import Image
 from pdf2image import convert_from_path
 from io import BytesIO
+import fitz  # PyMuPDF - لا يحتاج Poppler
 
 DEFAULT_TESSERACT_PATHS = [
     r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -86,36 +87,56 @@ def read_image(image_path):
 
 def read_pdf(pdf_path):
     """قراءة نص من PDF"""
-    poppler_path = _get_poppler_path()
     try:
-        if poppler_path:
-            images = convert_from_path(pdf_path, poppler_path=poppler_path, dpi=150)
-        else:
-            images = convert_from_path(pdf_path, dpi=150)
-
+        # محاولة باستخدام PyMuPDF أولاً (لا يحتاج Poppler)
+        pdf_document = fitz.open(pdf_path)
         full_text = ""
-        for idx, img in enumerate(images):
-            img = _optimize_image(img, quality=75)
-            text = pytesseract.image_to_string(img, lang='ara+eng')
+        
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            # استخراج النص مباشرة من صفحة PDF
+            text = page.get_text()
             full_text += text + "\n"
-            del img
-
-        return full_text.strip(), None
+            
+            # إذا لم نجد نصاً (صورة في PDF)، حول الصفحة إلى صورة وابحث عن النص
+            if not text.strip():
+                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+                img_data = pix.tobytes("ppm")
+                img = Image.open(BytesIO(img_data))
+                img = _optimize_image(img, quality=75)
+                ocr_text = pytesseract.image_to_string(img, lang='ara+eng')
+                full_text += ocr_text + "\n"
+        
+        pdf_document.close()
+        return full_text.strip() if full_text.strip() else None, None
+        
     except Exception as e:
-        print(f"خطأ في تحويل PDF: {e}")
-        if poppler_path is None:
+        print(f"خطأ في قراءة PDF باستخدام PyMuPDF: {e}")
+        
+        # إذا فشل PyMuPDF، جرب pdf2image مع Poppler
+        try:
+            poppler_path = _get_poppler_path()
+            if poppler_path:
+                images = convert_from_path(pdf_path, poppler_path=poppler_path, dpi=150)
+            else:
+                images = convert_from_path(pdf_path, dpi=150)
+
+            full_text = ""
+            for idx, img in enumerate(images):
+                img = _optimize_image(img, quality=75)
+                text = pytesseract.image_to_string(img, lang='ara+eng')
+                full_text += text + "\n"
+                del img
+
+            return full_text.strip(), None
+        except Exception as e2:
+            print(f"خطأ في تحويل PDF: {e2}")
             message = (
-                "لا يمكن معالجة PDF. Poppler غير موجود. "
-                "قم بتثبيت Poppler وتعيين POPPLER_PATH إلى مجلد bin، أو أضف ملفات Poppler إلى PATH. "
-                f"POPPLER_PATH={poppler_path!r}. خطأ: {e}"
+                "لا يمكن معالجة PDF. حاول تثبيت PyMuPDF: pip install pymupdf\n"
+                "أو ثبت Poppler وعيّن POPPLER_PATH بشكل صحيح.\n"
+                f"الخطأ: {e2}"
             )
-        else:
-            message = (
-                "لا يمكن معالجة PDF. مسار POPPLER_PATH غير صحيح أو مفقود الملفات المطلوبة. "
-                "تأكد من وجود pdfinfo.exe و pdftoppm.exe في المجلد. "
-                f"POPPLER_PATH={poppler_path!r}. خطأ: {e}"
-            )
-        return None, message
+            return None, message
 
 def extract_text(file_path):
     """استخراج النص من الملف"""

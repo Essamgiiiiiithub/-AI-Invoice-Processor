@@ -7,3 +7,4 @@ pytesseract>=0.3.10
 python-dotenv>=1.0.0
 groq>=0.8.0
 pdf2image>=1.17.0
+pymupdf>=1.23.0

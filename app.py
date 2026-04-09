@@ -15,7 +15,7 @@ import tempfile
 DB_PATH = os.path.join(tempfile.gettempdir(), "documents.db")
 EXCEL_PATH = os.path.join(os.getcwd(), "documents.xlsx")
 
-# إعداد الصفحة
+# Setup page 
 st.set_page_config(
     page_title="AI Document Processor",
     page_icon="🧾",
@@ -23,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# CSS للتصميم
+# CSS #
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
@@ -159,6 +159,30 @@ section[data-testid="stFileUploadDropzone"] {
     background: transparent !important;
 }
 
+/* تخصيص نص زر file uploader */
+[data-testid="stFileUploader"] button {
+    background: #3b82f6 !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 10px 20px !important;
+    font-weight: 600 !important;
+    font-size: 1rem !important;
+    transition: background 0.2s !important;
+}
+
+[data-testid="stFileUploader"] button:hover {
+    background: #1d4ed8 !important;
+}
+
+[data-testid="stFileUploader"] button::before {
+    content: "Choose File 📁" !important;
+}
+
+[data-testid="stFileUploader"] button div {
+    display: none !important;
+}
+
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"] {
     background: #eff6ff;
@@ -209,6 +233,31 @@ section[data-testid="stFileUploadDropzone"] {
     height: 1px;
     background: #e2e8f0;
     margin-left: 8px;
+}
+
+/* ── Dataframe styling ── */
+[data-testid="stDataFrame"] th {
+    font-weight: 700 !important;
+    font-size: 0.98rem !important;
+    color: #0f172a !important;
+    background: #e2efff !important;
+    border-bottom: 2px solid #c7d2fe !important;
+    padding: 14px 10px !important;
+}
+
+[data-testid="stDataFrame"] th span {
+    color: #0f172a !important;
+}
+
+[data-testid="stDataFrame"] th:hover {
+    color: #0f172a !important;
+}
+
+/* ── Multiselect styling ── */
+[data-testid="stMultiSelect"] div[role="option"] {
+    font-weight: 700 !important;
+    color: #0f172a !important;
+    font-size: 0.9rem !important;
 }
 
 /* ── Chart container ── */
@@ -387,12 +436,13 @@ with tab1:
     col_up, col_res = st.columns([1, 1], gap="large")
 
     with col_up:
-        st.markdown('<div class="section-title">Upload New Document</div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-title">Upload Document</div>', unsafe_allow_html=True)
+        st.markdown('<p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1rem;">Select a PDF or image file to analyze</p>', unsafe_allow_html=True)
         uploaded_files = st.file_uploader(
-            "Click to browse or drag & drop files",
+            "",
             type=["jpg", "jpeg", "png", "bmp", "pdf"],
             accept_multiple_files=True,
-            label_visibility="visible",
+            label_visibility="collapsed",
         )
         if uploaded_files:
             def is_image(filename):
@@ -600,14 +650,12 @@ with tab2:
         st.markdown('<div class="section-title">Complete Invoices Table</div>', unsafe_allow_html=True)
         
         # اختيار الأعمدة المراد عرضها
-        col_select_area = st.expander("Customize Columns", expanded=False)
-        with col_select_area:
-            columns_to_show = st.multiselect(
-                "Select columns to display",
-                options=df_display.columns.tolist(),
-                default=df_display.columns.tolist()[:8],
-                key="columns_select"
-            )
+        columns_to_show = st.multiselect(
+            "Select columns to display",
+            options=df_display.columns.tolist(),
+            default=df_display.columns.tolist()[:8],
+            key="columns_select"
+        )
         
         df_final = df_filtered[columns_to_show]
         
